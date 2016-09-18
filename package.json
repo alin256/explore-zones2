@@ -35,16 +35,7 @@
         ],
         "projectType": "native",
         "resources": {
-            "media": [
-                {
-                    "file": "images/three_worlds.png",
-                    "name": "IMAGE_3_WORLDS",
-                    "targetPlatforms": [
-                        "basalt"
-                    ],
-                    "type": "bitmap"
-                }
-            ]
+            "media": []
         },
         "sdkVersion": "3",
         "targetPlatforms": [
