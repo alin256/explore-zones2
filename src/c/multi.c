@@ -3,22 +3,40 @@
 
 
 static Window *s_window;	
-
+static Layer *marks_layer;
   
 
-
-
-struct place_descrition{
-  Layer *place_layer;
-  TextLayer *place_name_layer;
-  TextLayer *place_time_layer;
-  int32_t offset, x, y;
-  char place_name[80];
-  char watch_str[8];
-  //GColor color;
+struct direction_line_st{
+  bool vertical;
+  int16_t coord;
 };
 
-typedef struct place_descrition place_descr;
+typedef struct direction_line_st directed_line;
+
+struct place_descrition_st{
+  Layer *back_layer;
+  Layer *text_layer;
+  int32_t offset;
+  char place_name[25];
+  directed_line line;
+};
+
+typedef struct place_descrition_st place_descr;
+  
+struct cell_position_st{
+  int16_t x, y;
+  int16_t dx[2];
+  int16_t dy[2];
+  GPoint min, max;
+};
+
+typedef struct cell_position_st cell_position;
+  
+
+const int16_t offset_x = 3, offset_y = 3;
+const int16_t frame_width = 23;
+const int16_t offset_center = 10;
+
 
 
 
@@ -36,14 +54,8 @@ static void update_place(place_descr *place, Tuple *city_t, Tuple *offset_t, Tup
   if (!(city_t && offset_t && x_t && y_t))
     return;
   //TODO update only on suibstansial cahnges; make ifs
-  place->x = x_t->value->int32;
-  place->y = y_t->value->int32;
   place->offset = offset_t->value->int32;
   strncpy(place->place_name, city_t->value->cstring, sizeof(place->place_name));
-
-  snprintf(place->watch_str, sizeof(place->watch_str), "%d", (int)offset_t->value->int32);
-  text_layer_set_text(place->place_time_layer, place->watch_str);
-  text_layer_set_text(place->place_name_layer, place->place_name);
 }
 
 
@@ -86,11 +98,48 @@ static void in_received_handler(DictionaryIterator *received, void *context) {
   //send_message();
 }
 
+static void draw_marks(Layer *layer, GContext * ctx){
+  GSize size = layer_get_bounds(layer).size;
+  GPoint center = GPoint(size.w/2, size.h/2);
+  int32_t rad = size.h;
+  graphics_context_set_antialiased(ctx, true);
+  graphics_context_set_stroke_color(ctx, GColorWhite);
+  for (int32_t ang = 0; ang<TRIG_MAX_ANGLE/2; ang += TRIG_MAX_ANGLE/60){
+    GPoint p0 = GPoint((size.w*TRIG_MAX_RATIO/2 + sin_lookup(ang)*rad)/TRIG_MAX_RATIO, 
+                       (size.h*TRIG_MAX_RATIO/2 + cos_lookup(ang)*rad)/TRIG_MAX_RATIO);
+    GPoint p1 = GPoint((size.w*TRIG_MAX_RATIO/2 + sin_lookup(ang+TRIG_MAX_ANGLE/2)*rad)/TRIG_MAX_RATIO, 
+                       (size.h*TRIG_MAX_RATIO/2 + cos_lookup(ang+TRIG_MAX_ANGLE/2)*rad)/TRIG_MAX_RATIO);
+    graphics_draw_line(ctx, p0, p1);
+  }
+  graphics_context_set_stroke_width(ctx, 3);
+  for (int32_t ang = 0; ang<TRIG_MAX_ANGLE/2; ang += TRIG_MAX_ANGLE/12){
+    GPoint p0 = GPoint((size.w*TRIG_MAX_RATIO/2 + sin_lookup(ang)*rad)/TRIG_MAX_RATIO, 
+                       (size.h*TRIG_MAX_RATIO/2 + cos_lookup(ang)*rad)/TRIG_MAX_RATIO);
+    GPoint p1 = GPoint((size.w*TRIG_MAX_RATIO/2 + sin_lookup(ang+TRIG_MAX_ANGLE/2)*rad)/TRIG_MAX_RATIO, 
+                       (size.h*TRIG_MAX_RATIO/2 + cos_lookup(ang+TRIG_MAX_ANGLE/2)*rad)/TRIG_MAX_RATIO);
+    graphics_draw_line(ctx, p0, p1);
+  }
+  graphics_context_set_antialiased(ctx, false);
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_stroke_width(ctx, frame_width);
+  graphics_draw_rect(ctx, GRect(offset_x+frame_width/2, offset_y+frame_width/2, 
+                                size.w-offset_x*2-frame_width, size.h - offset_y*2-1-frame_width));
+  
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, GRect(offset_x+frame_width+offset_center, offset_y+frame_width+offset_center, 
+                                size.w-offset_x*2-frame_width*2-offset_center*2, 
+                                size.h - offset_y*2-frame_width*2-1-offset_center*2), 
+                    offset_center, GCornersAll);
+
+}
 
 static void window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
-  //TODO make ALL constants variable
+  marks_layer = layer_create(bounds);
+  //layer_set_background_color(marks_layer, GColorBlack);
+  layer_set_update_proc(marks_layer, draw_marks);
+  layer_add_child(window_layer, marks_layer);
 
 }
 
@@ -100,11 +149,6 @@ static void window_unload(Window *window) {
 
 static void update_time(place_descr *place, time_t *time){
   struct tm *tick_time = gmtime(time);
-  strftime(place->watch_str, sizeof(place->watch_str), clock_is_24h_style() ?
-                                          "%H:%M" : "%I:%M", tick_time);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Time in %s is updated to %s", place->place_name, place->watch_str); 
-  layer_mark_dirty(text_layer_get_layer(place->place_time_layer));
-  
 
 }
 
